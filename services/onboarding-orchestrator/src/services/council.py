@@ -9,6 +9,7 @@ All LLM calls go through the PII Filter Gateway for anonymization.
 """
 
 import asyncio
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -121,9 +122,32 @@ def format_twin_context(snapshot: dict) -> str:
             balance = float(acct.get("balance", 0))
             acct_type = acct.get("account_type", "")
             category = acct.get("account_category", "")
-            lines.append(
-                f"  - {display} ({acct_type}, {category}) at {inst_id}: ${balance:,.2f}"
-            )
+            detail = f"  - {display} ({acct_type}, {category}) at {inst_id}: ${balance:,.2f}"
+
+            # Surface mortgage details so LLMs understand the net worth breakdown
+            raw = acct.get("raw_data")
+            if raw and category == "LOAN_ACCOUNT":
+                if isinstance(raw, str):
+                    try:
+                        raw = json.loads(raw)
+                    except (json.JSONDecodeError, TypeError):
+                        raw = {}
+                if isinstance(raw, dict):
+                    prop_val = raw.get("propertyValue")
+                    rate = raw.get("interestRate")
+                    renewal = raw.get("maturityDate")
+                    extras = []
+                    if prop_val:
+                        equity = float(prop_val) - abs(balance)
+                        extras.append(f"property value: ${float(prop_val):,.2f}, home equity: ${equity:,.2f}")
+                    if rate:
+                        extras.append(f"rate: {rate}%")
+                    if renewal:
+                        extras.append(f"renewal: {renewal}")
+                    if extras:
+                        detail += f" [{', '.join(extras)}]"
+
+            lines.append(detail)
 
     # Income/expense from computed metrics if available
     monthly_income = metrics.get("monthly_income")
