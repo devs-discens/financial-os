@@ -6,45 +6,54 @@ What it takes to move from a working MVP to a system serving 500K–1M daily use
 
 ## Guardrails Service
 
-### The Problem
+### Current Implementation (MVP)
 
-Nothing prevents a user from asking the Council about cats. More critically, nothing prevents the Council from crossing regulatory lines in its financial guidance. The PII filter protects data leaving the system — guardrails protect the quality and legality of what comes back.
-
-### Architecture
-
-The guardrails service wraps the PII filter, not sits beside it. The full request flow becomes:
+The guardrails system is implemented and operational as regex-based pattern matching embedded in the orchestrator (`guardrails.py`). The full request flow:
 
 ```
 User query
-  → Guardrails (inbound) — classify intent, block off-topic, flag regulatory risk
+  → Guardrails (inbound) — validate input, reject off-topic/injection (HTTP 422)
   → PII Filter — anonymize
   → LLM(s) — reason
   → PII Rehydration — restore real values
-  → Guardrails (outbound) — check for regulatory violations, hallucinated advice
+  → Guardrails (outbound) — flag compliance issues, append disclaimer
   → User
 ```
 
-### Inbound Guardrails
+**Inbound guardrails** (4 entry points — council collaborative/adversarial, DAG generate, goal add/update):
+- Empty/length validation (max 2,000 characters)
+- Prompt injection detection (14 regex patterns: "ignore previous instructions", "jailbreak", "DAN mode", etc.)
+- Off-topic rejection (code generation, creative writing, medical/legal) — only when no financial keywords present
+- Financial keyword pass-through (75+ terms) prevents false positives
+- Ambiguous queries pass through — system prompts keep the LLM on-topic
 
-A lightweight classifier determines whether the query is within scope before it ever reaches the PII filter. No point anonymizing a question about cats.
+**Outbound guardrails** (4 points — council synthesis/verdict, DAG descriptions, goal assessment):
+- Return promise detection ("guaranteed return", "risk-free return")
+- Unauthorized professional advice detection ("as your tax advisor")
+- Harmful recommendation detection ("payday loan", "borrow to gamble")
+- Flagged responses never blocked — disclaimer appended instead
 
-This is not an LLM call — that would be expensive and slow. A small fine-tuned classifier model (distilled BERT or similar) trained on financial vs. non-financial intent. Fast, cheap, runs on Triton alongside Wealthsimple's existing model infrastructure.
+**System prompt reinforcement:** `SYSTEM_GUARDRAIL` constant appended to all 9 user-facing LLM system prompts. `_GROUNDING` constant on all council prompts enforces honest adviser tone.
 
-The classifier doesn't need to be perfect. It catches obviously off-topic queries and lets borderline ones through with a soft redirect. The smarter layer is context-aware: the guardrail has access to the user's twin state and current session context. "Tell me about cats" is off-topic. "Should I invest in Chewy stock?" is financial even though it mentions a pet company. The guardrail knows Alex is in a house-buying planning session, so questions about mortgage rates, savings strategies, and even tangential lifestyle cost questions are in-scope.
+### Production Evolution
 
-Soft rejections, not hard blocks. "I'm designed to help with your financial planning. Want to explore how your savings are tracking instead?" Not a wall — a redirect.
+The regex approach works well for the MVP — fast, zero-cost, no false positives on common queries. At scale, the evolution path:
 
-### Outbound Guardrails
+- **Phase 1 (MVP):** Current regex-based pattern matching. Catches obvious misuse.
+- **Phase 2:** Fine-tuned classifier (DistilBERT or similar) trained on financial vs. non-financial intent. Context-aware using twin state and session context. "Should I invest in Chewy stock?" correctly classified as financial despite mentioning a pet company.
+- **Phase 3:** Extract to separate service behind same `GuardrailResult` interface. Deploy on Triton alongside Wealthsimple's existing model infrastructure. Outbound classifier trained on regulatory compliance corpus.
 
-Even with an on-topic query, the LLM might generate responses that cross regulatory lines. The outbound layer checks for:
+The `GuardrailResult` dataclass and `validate_inbound`/`validate_outbound` signatures are designed to remain stable when the implementation evolves from regex to classifier.
 
-- **Specific return promises** — "You'll make 12% annually" is a compliance violation. Flag and rephrase as scenario-based language.
-- **Unauthorized tax advice** — "You should claim this as a deduction" crosses from information to advice. The system provides scenarios, not directives.
-- **Recommendations contradicting the user's risk profile** — The twin knows the user's risk tolerance. The outbound guardrail flags if the Council recommends aggressive equity allocation to a conservative investor.
-- **Hallucinated financial products** — LLMs can invent products that don't exist. Cross-reference against a known product registry.
-- **Definitive language** — Transform "you should" into "one option to consider" or "based on your current situation, this scenario shows."
+### Outbound Evolution
 
-The key insight: guardrails aren't about blocking off-topic queries. They're about ensuring the system stays within its advisory scope and never crosses into regulated territory. That's the difference between a chatbot and a financial product.
+At production scale, outbound guardrails should additionally check for:
+
+- **Recommendations contradicting the user's risk profile** — The twin knows risk tolerance. Flag aggressive equity allocation recommendations for conservative investors.
+- **Hallucinated financial products** — Cross-reference against a known product registry.
+- **Definitive language transformation** — "you should" → "one option to consider". Not blocking, but softening.
+
+The key insight: guardrails aren't about blocking off-topic queries. They're about ensuring the system stays within its advisory scope and never crosses into regulated territory.
 
 ---
 
@@ -499,3 +508,43 @@ Solutions:
 - **Clinical sensitivity.** Financial stress correlates with mental health challenges. The companion's tone must be informed by this. If a user's financial situation is deteriorating rapidly, the system should suggest professional financial counseling resources, not just try harder with gamification.
 - **No dark patterns.** Streaks should not create anxiety about breaking them. Missing a month of positive savings doesn't trigger a guilt message — it triggers "tough month, here's how to get back on track." The system celebrates progress, it doesn't punish setbacks.
 - **User research.** Before shipping, test with users who are in financial distress. If the gamification makes them feel worse, it needs redesigning. User wellbeing takes priority over engagement metrics.
+
+---
+
+## pgvector Scaling
+
+The MVP uses pgvector for two similarity search workloads: council session deduplication (1536d embeddings, HNSW index) and goal similarity detection (same dimensions). At scale, these need attention.
+
+Solutions:
+
+- **HNSW index tuning.** The default `m` and `ef_construction` parameters work for small datasets. At millions of sessions, tune these for the recall/speed tradeoff. Higher `m` = better recall but more memory.
+- **Approximate vs. exact search.** HNSW is approximate nearest neighbor. For compliance-critical deduplication (e.g., detecting duplicate financial advice), verify top results with exact cosine similarity.
+- **Embedding generation costs.** Every council session and goal embeds via OpenAI text-embedding-3-small. At 25K sessions/day, that's 25K embedding API calls. Batch where possible, consider local embedding models (e5-large, BGE) for cost reduction.
+- **Partition by user_id.** Similarity search should scope to the current user's sessions/goals. Partition the pgvector index or add user_id to the WHERE clause to avoid searching the global space.
+- **Archival strategy.** Soft-archived sessions are excluded from similarity search but remain in the table. At scale, move old archived sessions to a cold storage table to keep the HNSW index lean.
+
+---
+
+## Goal System at Scale
+
+Goals are reassessed every 10 background polling cycles. At 1M users with 3-5 goals each, this becomes a significant LLM workload.
+
+Solutions:
+
+- **Prioritized reassessment.** Not all goals need reassessment every cycle. Goals whose twin data hasn't materially changed (no new transactions, no balance changes above threshold) can be skipped.
+- **Batch reassessment.** Group goals by similarity and reassess representative goals, applying results to the group. "Save $50K for a down payment" for 10,000 users in similar situations doesn't need 10,000 separate LLM calls.
+- **Stale goal detection.** Goals untouched for 90+ days should be flagged for user review ("Is this goal still active?") rather than consuming reassessment resources.
+- **Cross-goal impact caching.** The cross-goal conflict analysis is expensive (requires full goal set + twin context). Cache conflict assessments and only recompute when a goal is added, removed, or materially changes.
+
+---
+
+## Human-in-the-Loop at Scale
+
+The DAG approval lifecycle (draft → approve → execute) is a core safety mechanism. At scale, it needs to stay usable.
+
+Solutions:
+
+- **Approval expiry.** DAGs awaiting approval for 30+ days should be archived. Financial conditions change — an action plan based on stale data is worse than no plan.
+- **Batch approval UX.** For users with multiple pending plans, enable reviewing and approving multiple DAGs in one session rather than one at a time.
+- **Approval analytics.** Track approval rates, time-to-approve, and approval-to-execution rates. Low approval rates may indicate the DAG generator is producing plans users don't trust.
+- **Transfer safety at scale.** Money movement nodes returning instructions (Phase 1) is inherently safe. When Phase 2 enables API-initiated transfers, every transfer node must require explicit user confirmation regardless of whether the DAG was pre-approved.

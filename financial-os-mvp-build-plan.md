@@ -1,5 +1,7 @@
 # Financial OS: MVP Simulation Build Plan
 
+> **Note:** This was the original build plan written before construction. The 8-component architecture was followed successfully, and the MVP was completed with additional features beyond the original scope (guardrails, goal system, positive progress, session persistence, React frontend, 7 seed users). For what was actually built, see [What Was Built](financial-os-what-was-built.md). Key divergences are noted inline with **[Implementation note]** markers.
+
 ## Objective
 
 Build a working simulation that demonstrates the full Financial OS loop end-to-end: dynamic bank onboarding as institutions come online, progressive twin construction, background orchestration with autonomous issue resolution, PII-filtered multi-LLM Council sessions (collaborative and adversarial), and Action DAG generation with user approval.
@@ -349,26 +351,23 @@ Output (rehydrated): A comprehensive overview using Alex's real numbers, combini
 User question: "Should I break my mortgage early and refinance at 
 a lower rate, or wait for renewal in 14 months?"
 
-Bull Model (Case for breaking early):
-  "Make the strongest case for breaking the mortgage now. Consider 
-   current rates, penalty costs, total interest savings, cash flow 
+Bull Model (Anthropic Claude — Case for breaking early):
+  "Make the strongest case for breaking the mortgage now. Consider
+   current rates, penalty costs, total interest savings, cash flow
    impact."
 
-Bear Model (Case for waiting):
-  "Make the strongest case for waiting until renewal. Consider 
-   penalty avoidance, rate uncertainty, opportunity cost of penalty 
+Bear Model (OpenAI GPT-4o — Case for waiting):
+  "Make the strongest case for waiting until renewal. Consider
+   penalty avoidance, rate uncertainty, opportunity cost of penalty
    payment, flexibility."
 
-Macro Model (Context check):
-  "Assess the current Canadian rate environment, Bank of Canada 
-   direction, housing market conditions. Which assumptions in the 
-   bull and bear cases are strongest/weakest?"
-
-Chairman (Synthesis):
-  "Present both cases fairly. Highlight where they agree, where they 
-   disagree, and what the key decision factors are. Surface the 
-   assumptions that most affect the outcome. Do not recommend — 
+Chairman (Google Gemini):
+  "Present both cases fairly. Highlight where they agree, where they
+   disagree, and what the key decision factors are. Surface the
+   assumptions that most affect the outcome. Do not recommend —
    present the trade-offs clearly so the user can decide."
+
+> **[Implementation note]** The original design included a fourth "Macro" model. The implementation uses three roles (Bull, Bear, Chairman), with the chairman incorporating macro context into its verdict.
 ```
 
 Output: A structured debate showing both sides with real numbers, key assumptions called out, and clear trade-offs for the user to evaluate.
@@ -591,12 +590,16 @@ The MVP runs as a scripted demonstration with interactive elements. Here's the t
 | PII Filter service | Python | Needs tight integration with LLM client libraries |
 | LLM Council | Python | Aligns with existing LLM Council project |
 | Action DAG engine | Python | DAG logic, dependency resolution, state management |
-| UI (optional) | React or terminal-based | Dashboard for twin, chat for Council, DAG visualization |
-| External LLMs | Anthropic Claude, OpenAI GPT | Real API calls through PII filter |
+| UI | React 19 / Vite 7 / Tailwind CSS 4 | Wealthsimple-inspired dashboard with conversation-first planning |
+| External LLMs | Anthropic Claude, OpenAI GPT-4o, Google Gemini | Real API calls through PII filter |
+
+> **[Implementation note]** The actual implementation also includes: LLM guardrails (inbound/outbound), goal system with pgvector similarity, positive progress (5-tier scoring, milestones, streaks, benchmarks), council session persistence with pgvector embeddings, Wealthsimple on-platform data seeding, 7 seed users, and a comprehensive React frontend. See [What Was Built](financial-os-what-was-built.md).
 
 ---
 
 ## What Success Looks Like
+
+> **[Implementation note]** All 8 items below were achieved, plus additional capabilities: LLM guardrails enforcing financial advisory scope, a goal system with cross-goal conflict detection and similarity search, gamified progress tracking with tiers/milestones/streaks/benchmarks, pgvector-powered session persistence, and a full React frontend. 197+ integration tests and 120 unit tests verify the system. See [What Was Built](financial-os-what-was-built.md) for the complete inventory.
 
 At the end of the simulation, someone watching can see:
 

@@ -1,5 +1,7 @@
 # Financial OS: Positive Progress — Gamified Financial Wellness
 
+> **Note:** This is the original design document for the Positive Progress feature. The core concept was implemented — five tiers, milestone detection, streak tracking, national/peer benchmarks, and LLM-generated assessment narratives. Some aspirational features (spending impact analysis, voice delivery via Willow, ML pattern recognition, shareable moments) remain as future possibilities. See [What Was Built](financial-os-what-was-built.md) for the implementation details.
+
 ## Concept
 
 Turn financial health into a visible, rewarding journey. Using the digital financial twin's cross-institutional view, Wealthsimple can show users where they stand, celebrate progress, and provide a constant encouraging companion — especially for those who are behind and need it most.
@@ -101,6 +103,8 @@ A weighted composite score across core health metrics:
 
 Recalculated on each polling cycle. Tier changes trigger milestone events.
 
+> **[Implementation note]** The actual scoring uses five weighted components: savings rate (25%), emergency fund (25%), debt-to-income trend (20%), credit utilization (15%), and consistency (15%). Investment diversification and goal progress are not yet included in the composite score but are tracked separately and visible in the UI.
+
 ---
 
 ## Milestones and Celebrations
@@ -129,6 +133,8 @@ The system watches for moments worth celebrating:
 
 ## Spending Impact Analysis
 
+> **[Implementation note]** This feature was not implemented in the MVP. It remains an aspirational capability for production.
+
 ### Real-Time Decision Support
 When the twin has a complete picture, every spending decision can be contextualized:
 
@@ -149,6 +155,8 @@ Again — information, not judgment. The user decides.
 ---
 
 ## The Companion for People Who Are Behind
+
+> **[Implementation note]** The tone and philosophy described below influenced the implementation — the `_GROUNDING` constant and honest adviser prompts enforce empathy and specificity. The specific delivery features (payday-timed nudges, voice via Willow, proactive spending alerts) were not built in the MVP.
 
 This is the most important use case and the one most financial tools completely fail at.
 

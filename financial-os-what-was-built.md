@@ -31,7 +31,7 @@ Seven Docker services, a React frontend, and a PostgreSQL database — all opera
 
 ### Test Coverage
 
-197+ integration tests (including real external LLM calls) and 120 unit tests verify the entire system.
+204 integration tests (including real external LLM calls) and 120 unit tests verify the entire system.
 
 | Suite | Tests | What It Covers |
 |---|---|---|
@@ -49,7 +49,7 @@ Seven Docker services, a React frontend, and a PostgreSQL database — all opera
 | Multi-user E2E | 5 | Cross-user isolation, concurrent connections |
 | Progress E2E | 13 | Scoring, milestones, streaks, benchmarks |
 | Guardrails E2E | 18 | Inbound rejection, outbound compliance flagging |
-| Session E2E | 15 | Session persistence, similarity search, archive, PATCH link (real LLM calls) |
+| Session E2E | 17 | Session persistence, similarity search, archive, PATCH link (real LLM calls) |
 | JS unit tests | 75 | Shared lib, bank configs, registry, error handling |
 | Python guardrails unit | 45 | Inbound/outbound validation, edge cases |
 
@@ -524,7 +524,7 @@ cd ui && npm run dev
 
 # Run all tests
 cd services
-node --test tests/integration/*.test.js   # 197+ integration tests
+node --test tests/integration/*.test.js   # 204 integration tests
 npm test                                   # 75 JS unit tests
 cd onboarding-orchestrator && python3 -m unittest tests/test_guardrails.py -v  # 45 Python unit tests
 

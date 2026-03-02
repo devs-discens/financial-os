@@ -158,7 +158,7 @@ Then log in as `alex-chen` / `alex123` to see the full experience.
 ```bash
 cd services
 
-# All integration tests (197+ tests, some make real LLM calls)
+# All integration tests (204 tests, some make real LLM calls)
 node --test tests/integration/*.test.js
 
 # Unit tests (no Docker needed)

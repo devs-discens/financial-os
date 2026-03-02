@@ -1,5 +1,7 @@
 # Financial OS: Technical Architecture & Implementation Guide
 
+> **Note:** This document was the pre-build architecture spec. The 8-component structure was followed, but specific implementation details evolved during development. For what was actually built, see [What Was Built](financial-os-what-was-built.md). Key divergences are noted inline with **[Implementation note]** markers.
+
 ## Overview
 
 Financial OS is an AI-native platform that builds a **Digital Financial Twin** — a living, real-time model of a user's complete financial life across all connected Canadian financial institutions. It combines open banking data (FDX APIs) with multi-LLM reasoning to deliver cross-institutional financial intelligence.
@@ -410,21 +412,19 @@ Chairman (Synthesizer):
 ```
 User: "Should I break my mortgage early and refinance?"
 
-Bull (Case for breaking early):
+Bull (Anthropic Claude — Case for breaking early):
   "Strongest case for breaking now. Current rates, penalty costs, total
    interest savings, cash flow impact."
 
-Bear (Case for waiting):
+Bear (OpenAI GPT-4o — Case for waiting):
   "Strongest case for waiting until renewal. Penalty avoidance, rate
    uncertainty, opportunity cost."
 
-Macro (Context check):
-  "Canadian rate environment, Bank of Canada direction, housing market.
-   Which assumptions are strongest/weakest?"
-
-Chairman:
+Chairman (Google Gemini):
   "Present both cases fairly. Where they agree, disagree. Key decision
    factors. Surface assumptions. Do not recommend — present trade-offs."
+
+> **[Implementation note]** The original design included a fourth "Macro" model. The implementation uses three roles (Bull, Bear, Chairman). The chairman incorporates macro context into its verdict.
 ```
 
 **Adaptations from Base Council:**
@@ -446,21 +446,24 @@ Chairman:
 **Inspired by:** Jarvis-EA's L6 executor (DAG walking, dependency resolution, output references)
 
 **DAG Node Structure:**
+
+> **[Implementation note]** The actual implementation uses simpler node types than originally designed. Rollback conditions, advisor approval gates, and output reference resolution were not implemented in the MVP.
+
 ```python
 {
-    "id": "node_1",
-    "description": "Verify TFSA contribution room",
-    "type": "automated_check | manual_action | api_action | council_trigger",
-    "prerequisites": ["node_id_1", "node_id_2"],
-    "approval_required": True | False,
-    "approval_gates": ["user"] | ["user", "advisor"],
-    "execution_type": "automated | manual | api_initiated",
-    "status": "pending | ready | approved | in_progress | complete | blocked | skipped",
-    "instructions": "Human-readable instructions for manual steps",
-    "rollback": "What to do if this step fails after prior steps succeeded",
-    "output": {},  # Result data available to dependent nodes via {{node_1.output.field}}
+    "key": "check-balance",
+    "description": "Verify chequing account has sufficient funds",
+    "type": "check | transfer | allocate | council | manual",
+    "execution_type": "auto | manual | approval_required",
+    "dependencies": ["node-key-1", "node-key-2"],
+    "status": "pending | approved | completed | failed",
+    "instructions": "Human-readable instructions (for manual/transfer steps)",
 }
 ```
+
+**Node types:** `check` (verify conditions against twin), `transfer` (money movement — never auto-executes, returns instructions), `allocate` (fund allocation), `council` (triggers new advisory session), `manual` (user-performed action).
+
+**Human control:** DAGs follow a mandatory three-phase lifecycle: draft → approve (user selects specific nodes) → execute (only approved nodes, in topological order via Kahn's algorithm). Transfer nodes always return instructions for manual user action.
 
 **DAG Generation Flow:**
 ```
@@ -505,34 +508,32 @@ Council recommendation + user approval to act
 
 ---
 
-## Knowledge Graph Schema
+## Database Schema
 
-Adapted from Jarvis-EA's node/edge model for financial domain.
+> **[Implementation note]** The original design called for a generic node/edge knowledge graph. The implementation uses purpose-built relational tables, which proved simpler and more performant. pgvector extensions provide vector similarity search for embeddings.
 
-### Node Types
+### Actual Tables (16 tables across V1-V13 migrations)
 
-| Type | Purpose | Key Properties |
+| Table | Pattern | Purpose |
 |---|---|---|
-| `institution_template` | Cached onboarding template | oauth_config, account_types, polling_schedule, trust_score |
-| `connection` | User's active institution connection | institution_id, user_id, oauth_tokens (encrypted), consent_scope, status |
-| `account` | Individual financial account | type, institution_id, identifiers, current_balance |
-| `transaction` | Financial transaction | account_id, amount, category, merchant, date, enrichment |
-| `twin_snapshot` | Point-in-time twin state | user_id, metrics, timestamp |
-| `dag_template` | Cached Action DAG pattern | scenario, steps, trust_score |
-| `pii_session` | PII filter session | mapping (encrypted), perturbed_context, created_at |
-| `policy` | System configuration | name, parameters |
-| `prompt_template` | LLM prompt template | name, template, variables |
+| `institution_templates` | Cache | Onboarding blueprints (OAuth config, endpoints, polling schedule) |
+| `connections` | Mutable | User-institution links (tokens, consent, status) |
+| `connected_accounts` | SCD2 | Account state with full history (valid_from/valid_to) |
+| `twin_transactions` | Append-only | All transactions across all institutions |
+| `twin_statements` | Append-only | Bank statements (mortgage amortization schedules) |
+| `twin_metrics` | Append-only | Computed metrics over time (net worth, income, DTI, etc.) |
+| `onboarding_events` | Append-only | Audit trail of all onboarding and background events |
+| `action_dags` | Mutable | Generated action plans with lifecycle status (goal_id FK, archived) |
+| `dag_nodes` | Mutable | Individual steps within action plans |
+| `users` | Mutable | Authentication and profile (demographics, role) |
+| `progress_milestones` | Append-only | Detected achievements with narrative and acknowledgement |
+| `progress_streaks` | Mutable | Current and longest streak counts |
+| `benchmark_overrides` | Mutable | Admin-editable benchmark bracket values |
+| `twin_holdings` | Append-only | Investment holdings for on-platform accounts |
+| `user_goals` | Mutable | Financial goals with LLM analysis, goal_embedding VECTOR(1536) |
+| `council_sessions` | Append-only | Advisory sessions with question_embedding VECTOR(1536), goal_id FK, archived |
 
-### Edge Types
-
-| Type | From → To | Purpose |
-|---|---|---|
-| `has_connection` | user → connection | User's institution connections |
-| `has_account` | connection → account | Accounts under a connection |
-| `has_transaction` | account → transaction | Transactions in an account |
-| `generated_from` | institution_template → connection | Template used for onboarding |
-| `resolves` | dag_template → scenario | DAG pattern for a scenario |
-| `produces` | dag_node → state_change | Outcome of a DAG step |
+**Key patterns:** SCD2 for account history, append-only for immutable data, pgvector HNSW indexes for similarity search, soft archive (boolean) for goals/sessions/DAGs, ON DELETE SET NULL for goal FK cascading.
 
 ---
 
@@ -545,11 +546,13 @@ Port    Service                  Technology       Container
 3002    Heritage Financial API   Node.js/Express  docker
 3003    Frontier Business API    Node.js/Express  docker
 3010    Open Banking Registry    Node.js/Express  docker
-5432    PostgreSQL + pgvector    PostgreSQL 16     docker
-8100    Financial OS API         Python/FastAPI    local/docker
-8101    PII Filter Gateway       Python/FastAPI    local/docker
-8102    Background Orchestrator  Python (async)    local/docker
+5433    PostgreSQL + pgvector    PostgreSQL 16     docker
+3020    Orchestrator (all)       Python/FastAPI    docker
+3030    PII Filter Gateway       Python/FastAPI    docker
+5173    React Frontend           React/Vite       local
 ```
+
+> **[Implementation note]** Background orchestration runs as an embedded asyncio task within the orchestrator (port 3020), not as a separate service. PostgreSQL runs on port 5433 (not 5432) to avoid conflicts with local Postgres installations.
 
 **LLM Providers (external, through PII Filter):**
 - Anthropic Claude API
@@ -634,5 +637,48 @@ Port    Service                  Technology       Container
 | PII Filter service | Python / FastAPI | Tight integration with LLM client libraries |
 | LLM Council | Python / FastAPI | Direct adaptation from LLM Council codebase |
 | Action DAG engine | Python | DAG logic from Jarvis-EA's L6 executor |
-| UI | React | Adaptation from LLM Council frontend |
-| External LLMs | Claude, GPT, Gemini | Real API calls through PII filter |
+| UI | React 19 / Vite 7 / Tailwind CSS 4 | Wealthsimple-inspired design, conversation-first planning |
+| External LLMs | Claude, GPT-4o, Gemini | Real API calls through PII filter |
+| Embeddings | OpenAI text-embedding-3-small | 1536d vectors for session/goal similarity search |
+
+---
+
+## Features Added During Implementation
+
+> **[Implementation note]** The following features were designed and built during implementation, extending beyond the original 8-component architecture.
+
+### LLM Guardrails
+
+Inbound validation (HTTP 422 rejection for empty/long/off-topic/prompt-injection) wraps all 4 user-facing LLM entry points. Outbound validation flags compliance issues (return promises, unauthorized advice, harmful recommendations) with disclaimer append — never blocks. `SYSTEM_GUARDRAIL` constant appended to all 9 LLM system prompts. `_GROUNDING` constant enforces honest adviser tone on all council prompts.
+
+**File:** `services/onboarding-orchestrator/src/services/guardrails.py`
+
+### Goal System
+
+LLM-powered goal feasibility analysis (green/yellow/red), cross-goal conflict detection, background reassessment (every 10 cycles), pgvector similarity search (threshold 0.80), goal-linked sessions and DAGs via `goal_id` FK. CRUD at `/goals/{user_id}`, discuss via `/goals/{user_id}/{goal_id}/discuss`, plan via `/goals/{user_id}/{goal_id}/plan`.
+
+**Files:** `services/onboarding-orchestrator/src/services/goals.py`, `services/onboarding-orchestrator/src/routes/goals.py`
+
+### Positive Progress
+
+Five-tier scoring (0-100, five weighted components), milestone detection (net worth crossings, emergency fund, debt payoff, tier transitions, personal bests, goal progress), streak tracking, national benchmarks (24 brackets, province COL), peer benchmarks (deterministic from demographics), LLM-generated assessment narrative.
+
+**Files:** `services/onboarding-orchestrator/src/services/benchmarks.py`, `services/onboarding-orchestrator/src/services/milestones.py`, `services/onboarding-orchestrator/src/routes/progress.py`
+
+### Session Persistence
+
+Council sessions stored with pgvector embeddings (1536d, HNSW index). Cosine similarity search for semantic deduplication. Soft archive pattern. Retroactive goal linking via PATCH.
+
+**File:** `services/onboarding-orchestrator/src/services/session_store.py`
+
+### Wealthsimple On-Platform Data
+
+Pre-connected on-platform institution with TFSA/RRSP/chequing accounts and holdings (ETFs, equities, crypto, fixed income, cash). Background polling skips on-platform connections. Twin snapshot includes holdings with portfolio allocation breakdown.
+
+### React Frontend
+
+React 19 + Vite 7 + Tailwind CSS 4. Wealthsimple-inspired design (warm whites #FAF9F7, Dune #32302F, Mulish font). Pages: Financial Picture (twin dashboard), Progress (gamified wellness), Your Adviser (conversation-first planning), Admin (5-tab console). 7 seed users with varied demographics.
+
+### Simulated Users (7)
+
+alex-chen (primary), sarah-johnson, marcus-williams, priya-patel, david-kim, emma-rodriguez, admin. Each with distinct financial profiles, designated bank connections, and Wealthsimple on-platform accounts.

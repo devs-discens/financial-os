@@ -1,5 +1,7 @@
 # Financial OS: The AI-Native Financial Intelligence Platform
 
+> **Note:** This document was the original vision/design document written before construction began. For what was actually built, see [What Was Built](financial-os-what-was-built.md). The core architecture described here was implemented, but specific details (ports, service topology, council roles) evolved during development. Key divergences are noted inline with **[Implementation note]** markers.
+
 ## Vision
 
 Open banking is solving the plumbing problem — getting data to flow between institutions. But someone still needs to solve the intelligence problem — making sense of that data, learning user preferences, reasoning across institutions, and getting smarter over time.
@@ -204,10 +206,11 @@ Use case: "Give me an overview of my financial health" or "How am I doing on my 
 **Adversarial / Debate Mode**
 Models argue opposing positions on a financial decision:
 
-- Bull model: Makes the strongest case for Option A (e.g., pay off the mortgage early).
-- Bear model: Makes the strongest case for Option B (e.g., invest the money instead).
-- Macro model: Checks assumptions against current economic conditions.
-- Chairman: Presents both cases fairly, highlights where they agree and disagree, surfaces key assumptions and uncertainties.
+- Bull model (Anthropic Claude): Makes the strongest case for Option A (e.g., pay off the mortgage early).
+- Bear model (OpenAI GPT-4o): Makes the strongest case for Option B (e.g., invest the money instead).
+- Chairman (Google Gemini): Presents both cases fairly, highlights where they agree and disagree, surfaces key assumptions and uncertainties.
+
+> **[Implementation note]** The original design included a fourth "Macro" model. The implementation uses three roles (Bull, Bear, Chairman), with the chairman incorporating macro context into its verdict.
 
 Use case: "Should I pay off my mortgage or invest?" or "Is now a good time to buy a rental property?"
 
@@ -216,6 +219,12 @@ All Council models are external LLM calls. Every call passes through the PII fil
 
 **Clarification Flow**
 Financial questions are often ambiguous. "Should I save more?" depends on: save for what? In what account type? Over what time horizon? At what risk tolerance? The Council can generate clarifying questions before deliberating, ensuring the analysis is relevant to the user's actual situation.
+
+> **[Implementation note]** Clarification flow was not implemented in the MVP. System prompts and grounding constants handle ambiguity by requiring LLMs to ask for specifics within their responses when needed.
+
+**Session Persistence and Similarity Search**
+
+> **[Implementation note]** Every council session is stored in `council_sessions` with pgvector embeddings (OpenAI text-embedding-3-small, 1536d, HNSW index). Before answering a new question, the system can surface past sessions that covered similar ground via cosine similarity search. Sessions accept an optional `goal_id` to link advisory sessions to financial goals. Sessions support soft archive (excluded from list/similarity but preserved for audit).
 
 ### 5. Action DAGs
 
@@ -257,6 +266,66 @@ Common scenarios produce similar DAGs. "Maximize TFSA then invest remainder" is 
 
 **Audit Trail**
 Every generated DAG is stored as a complete record: what the Council recommended, what the user approved, what steps executed, what the outcomes were. This serves compliance requirements, enables system improvement, and gives users a history of their financial decisions.
+
+---
+
+### 6. LLM Guardrails
+
+> **[Implementation note]** This section describes functionality that was built after the original vision document.
+
+Embedded inbound and outbound validation that keeps all LLM interactions within appropriate financial advisory scope. Four layers of protection:
+
+**Inbound validation** wraps all four user-facing LLM entry points (council collaborative, council adversarial, DAG generate, goal add/update) at the route level. Requests are rejected with HTTP 422 if they are empty, excessively long (>2,000 chars), off-topic (no financial relevance), or contain prompt injection attempts (14 patterns including "ignore previous instructions", "jailbreak", "DAN mode"). The validation is deliberately permissive — 75+ financial keywords provide a fast-pass, and ambiguous queries pass through rather than being blocked.
+
+**Outbound validation** scans all LLM responses after rehydration, flagging compliance issues: return promises ("guaranteed 12% returns"), unauthorized professional advice ("as your tax advisor"), or harmful recommendations ("take out a payday loan to invest"). Flagged responses are never blocked — a disclaimer is appended instead.
+
+**System prompt reinforcement** via a `SYSTEM_GUARDRAIL` constant appended to all 9 user-facing LLM system prompts, establishing behavioral boundaries at the model level.
+
+**Honest adviser tone** via a `_GROUNDING` constant on all council prompts and goal analysis prompts, forcing LLMs to use real numbers, acknowledge risks, and avoid over-promising.
+
+The current implementation uses regex-based pattern matching — fast, zero-cost, no false positives. The architecture is designed to evolve to a fine-tuned classifier (BERT/DistilBERT) behind the same interface.
+
+### 7. Goal System
+
+> **[Implementation note]** This section describes functionality that was built after the original vision document.
+
+LLM-powered financial goal tracking that serves as the organizing principle for the platform's planning features.
+
+Users describe goals in natural language. The system runs the description through the PII filter with the twin snapshot, and the LLM returns structured analysis: summary label, goal type (savings/debt_payoff/investment/purchase/income/retirement/emergency_fund), target amount and date, feasibility assessment (green/yellow/red), narrative assessment, cross-goal impact analysis, and estimated progress percentage.
+
+**Cross-goal conflict detection:** Multiple goals competing for the same resources (e.g., aggressive RRSP contributions alongside a down payment savings goal) are identified and explained.
+
+**Background reassessment:** Active goals are automatically re-evaluated every 10 polling cycles against current twin data.
+
+**Goal similarity detection:** Goals are embedded via pgvector (cosine similarity, threshold 0.80) to detect duplicate or overlapping goals.
+
+**Goal-linked sessions and plans:** Goals connect to the Council and DAG engine via `goal_id`, creating a traceable chain: conversation → goal → action plan.
+
+### 8. Positive Progress (Gamified Financial Wellness)
+
+> **[Implementation note]** This section describes functionality that was built after the original vision document. See [Positive Progress design](financial-os-positive-progress.md) for the original vision.
+
+A gamification layer that transforms the Digital Twin from a data dashboard into an encouraging financial companion. Design principle: **celebration of progress, not punishment of spending.**
+
+**Five-tier scoring system** (Starting Out → Building → Growing → Thriving → Flourishing) computed from five weighted components: savings rate (25%), emergency fund (25%), debt-to-income trend (20%), credit utilization (15%), and consistency (15%).
+
+**Milestone detection:** Net worth crossings ($0, $10K, $25K...), emergency fund levels, savings milestones, debt payoff, tier transitions, goal progress thresholds, and personal bests.
+
+**Streak tracking:** Consecutive positive savings and debt reduction periods.
+
+**Benchmarking:** National benchmarks (simulated Stats Canada, 24 age/income brackets, province cost-of-living adjustments) and peer benchmarks (deterministic from demographics hash).
+
+**Assessment engine:** LLM-generated narrative titles and summaries with rule-based fallback. Wired into the background poll cycle.
+
+### 9. Human Control and Safety
+
+> **[Implementation note]** This section describes the defense-in-depth approach implemented across the system.
+
+**DAG approval lifecycle:** AI-generated action plans follow a mandatory three-phase lifecycle — draft (LLM generates, nothing executes) → approve (user explicitly selects which nodes to proceed with) → execute (only approved nodes run in dependency order). Transfer/money-movement nodes never auto-execute — they return instructions for the user to act on manually.
+
+**Authentication and authorization:** JWT-based auth with access/refresh token pairs. Role-based access control (admin vs user). User isolation via `resolve_user_id()` ensures users can only access their own data. Per-account OAuth consent enforced at every FDX endpoint.
+
+**Data integrity:** SCD2 history preserves complete account change records. Append-only tables for transactions, statements, metrics. Soft deletes (goals, sessions, DAGs) preserve audit trails. Idempotent inserts prevent duplicates.
 
 ---
 
@@ -330,3 +399,9 @@ These concerns represent the gap between a working demo and a production system 
 | **Sagas & Compensating Transactions** | Each DAG node pairs forward action with undo action. Failure triggers backward walk. | Action DAGs |
 | **Idempotency** | Every DAG action carries an idempotency key. Retries never double-execute. | Action DAGs |
 | **PII Filter Multi-Tenancy** | Complete session isolation by design. No cross-user mapping leakage possible. | PII Filter Gateway Service |
+| **Guardrails** | Inbound rejection + outbound compliance flagging wrap all LLM entry points. | LLM Guardrails |
+| **Human-in-the-Loop** | DAG approval lifecycle (draft → approve → execute). Transfer nodes never auto-execute. | Human Control and Safety |
+| **Session Persistence** | pgvector embeddings enable similarity search across council sessions. Soft archive for audit. | LLM Council |
+| **Goal Similarity** | pgvector cosine similarity detects duplicate/overlapping goals before creation. | Goal System |
+
+> **[Implementation note]** Actual service ports: PostgreSQL 5433, Maple Direct 3001, Heritage Financial 3002, Frontier Business 3003, Registry 3010, Orchestrator 3020, PII Filter 3030. Background orchestration runs as an embedded asyncio task within the orchestrator (port 3020), not as a separate service. The React frontend runs on port 5173.
