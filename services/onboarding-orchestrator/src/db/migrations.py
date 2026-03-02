@@ -325,6 +325,13 @@ ALTER TABLE action_dags ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAU
 """
 
 
+MIGRATION_V14_NODE_CHECKLIST = """
+-- v14: Checklist support on DAG nodes — users can mark steps as done
+ALTER TABLE dag_nodes ADD COLUMN IF NOT EXISTS checked BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE dag_nodes ADD COLUMN IF NOT EXISTS checked_at TIMESTAMPTZ;
+"""
+
+
 async def run_migrations(pool: asyncpg.Pool):
     async with pool.acquire() as conn:
         await conn.execute(SCHEMA)
@@ -340,4 +347,5 @@ async def run_migrations(pool: asyncpg.Pool):
         await conn.execute(MIGRATION_V11_COUNCIL_SESSIONS)
         await conn.execute(MIGRATION_V12_GOAL_LINKS)
         await conn.execute(MIGRATION_V13_GOAL_EMBEDDINGS_AND_ARCHIVE)
+        await conn.execute(MIGRATION_V14_NODE_CHECKLIST)
     logger.info("Database migrations complete")

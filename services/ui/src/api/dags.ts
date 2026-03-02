@@ -29,6 +29,13 @@ export function executeDag(dagId: number) {
   })
 }
 
+export function toggleNodeChecked(dagId: number, nodeKey: string, checked: boolean) {
+  return fetchJSON<Dag>(`/dags/${dagId}/nodes/${nodeKey}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ checked }),
+  })
+}
+
 export function archiveDag(dagId: number) {
   return fetchJSON<{ status: string; dag_id: number }>(`/dags/${dagId}`, {
     method: 'DELETE',

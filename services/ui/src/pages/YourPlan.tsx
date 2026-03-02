@@ -6,7 +6,7 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import EmptyState from '../components/EmptyState'
 import StatusBadge, { NodeTypeBadge } from '../components/StatusBadge'
 import { runCollaborative, runAdversarial, checkSimilar, listSessions, getSession, archiveSession, linkSessionToGoal } from '../api/council'
-import { listDags, getDag, generateDag, approveNodes, executeDag, archiveDag } from '../api/dags'
+import { listDags, getDag, generateDag, approveNodes, executeDag, archiveDag, toggleNodeChecked } from '../api/dags'
 import { listGoals, addGoal, deleteGoal, generateGoalPlan, checkSimilarGoal } from '../api/goals'
 import type { SimilarGoalMatch } from '../api/goals'
 import { ApiError } from '../api/client'
@@ -898,7 +898,15 @@ export default function YourPlan() {
 
                           <div className="space-y-0">
                             {dagDetail.nodes.map((node, i) => (
-                              <NodeCard key={node.node_key} node={node} isLast={i === dagDetail.nodes.length - 1} />
+                              <NodeCard
+                                key={node.node_key}
+                                node={node}
+                                isLast={i === dagDetail.nodes.length - 1}
+                                onToggle={async (checked) => {
+                                  const updated = await toggleNodeChecked(dagDetail.dag_id, node.node_key, checked)
+                                  setDagDetail(updated)
+                                }}
+                              />
                             ))}
                           </div>
 
@@ -1413,7 +1421,7 @@ const statusDotStyles: Record<string, string> = {
   failed: 'bg-ws-red',
 }
 
-function NodeCard({ node, isLast }: { node: DagNode; isLast: boolean }) {
+function NodeCard({ node, isLast, onToggle }: { node: DagNode; isLast: boolean; onToggle: (checked: boolean) => void }) {
   const [showResult, setShowResult] = useState(false)
 
   return (
@@ -1422,14 +1430,19 @@ function NodeCard({ node, isLast }: { node: DagNode; isLast: boolean }) {
         <div className={`h-3 w-3 rounded-full shrink-0 mt-5 ${statusDotStyles[node.status] ?? 'bg-ws-muted'}`} />
         {!isLast && <div className="w-px flex-1 bg-ws-border" />}
       </div>
-      <div className="flex-1 rounded-xl bg-white border border-ws-border p-4 mb-3 shadow-sm">
+      <div className={`flex-1 rounded-xl border border-ws-border p-4 mb-3 shadow-sm ${node.checked ? 'bg-ws-bg' : 'bg-white'}`}>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-sm">{node.title}</span>
+          <input
+            type="checkbox"
+            checked={node.checked}
+            onChange={(e) => onToggle(e.target.checked)}
+            className="h-4 w-4 rounded border-ws-border text-ws-accent accent-ws-accent cursor-pointer shrink-0"
+          />
+          <span className={`font-semibold text-sm ${node.checked ? 'line-through text-ws-muted' : ''}`}>{node.title}</span>
           <NodeTypeBadge type={node.node_type} />
-          <StatusBadge status={node.execution_type} />
           <StatusBadge status={node.status} />
         </div>
-        <p className="mt-1 text-xs text-ws-muted">{node.description}</p>
+        <p className={`mt-1 text-xs text-ws-muted ${node.checked ? 'line-through' : ''}`}>{node.description}</p>
 
         {node.depends_on.length > 0 && (
           <p className="mt-2 text-xs text-ws-muted">

@@ -158,7 +158,7 @@ Then log in as `alex-chen` / `alex123` to see the full experience.
 ```bash
 cd services
 
-# All integration tests (204 tests, some make real LLM calls)
+# All integration tests (208 tests, some make real LLM calls)
 node --test tests/integration/*.test.js
 
 # Unit tests (no Docker needed)
@@ -208,6 +208,7 @@ React 19 + Vite + Tailwind CSS 4 with a Wealthsimple-inspired design (warm white
 | **Financial Picture** | Twin dashboard — accounts, metrics, holdings, portfolio allocation, transactions, goals |
 | **Progress** | Tier scoring, national + peer benchmarks, milestones, streaks, LLM assessment |
 | **Your Adviser** | Conversation-first planning — ask questions, track goals, create action plans, review past conversations |
+| **Settings** | Profile editor — demographics, income, occupation, housing, financial goals |
 | **Admin** | Registry, users, demo setup, benchmarks, background monitoring with per-user connection health |
 
 ## Simulated Users

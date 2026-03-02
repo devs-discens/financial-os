@@ -21,11 +21,26 @@ const variantStyles: Record<string, string> = {
   council: 'bg-ws-orange/15 text-ws-orange',
 }
 
+const statusLabels: Record<string, string> = {
+  pending: 'Pending',
+  approved: 'Approved',
+  executing: 'Running',
+  completed: 'Complete',
+  failed: 'Failed',
+  draft: 'Draft',
+  pending_approval: 'Pending Approval',
+  active: 'Active',
+  stale: 'Stale',
+  revoked: 'Revoked',
+  mfa_pending: 'MFA Pending',
+}
+
 export default function StatusBadge({ status }: { status: BadgeVariant | string }) {
   const style = variantStyles[status] ?? 'bg-ws-muted/15 text-ws-muted'
+  const label = statusLabels[status] ?? status.replace(/_/g, ' ')
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style}`}>
-      {status.replace(/_/g, ' ')}
+      {label}
     </span>
   )
 }

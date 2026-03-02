@@ -512,7 +512,7 @@ Council recommendation + user approval to act
 
 > **[Implementation note]** The original design called for a generic node/edge knowledge graph. The implementation uses purpose-built relational tables, which proved simpler and more performant. pgvector extensions provide vector similarity search for embeddings.
 
-### Actual Tables (16 tables across V1-V13 migrations)
+### Actual Tables (16 tables across V1-V14 migrations)
 
 | Table | Pattern | Purpose |
 |---|---|---|
@@ -524,7 +524,7 @@ Council recommendation + user approval to act
 | `twin_metrics` | Append-only | Computed metrics over time (net worth, income, DTI, etc.) |
 | `onboarding_events` | Append-only | Audit trail of all onboarding and background events |
 | `action_dags` | Mutable | Generated action plans with lifecycle status (goal_id FK, archived) |
-| `dag_nodes` | Mutable | Individual steps within action plans |
+| `dag_nodes` | Mutable | Individual steps within action plans (with checked/checked_at for checklist tracking) |
 | `users` | Mutable | Authentication and profile (demographics, role) |
 | `progress_milestones` | Append-only | Detected achievements with narrative and acknowledgement |
 | `progress_streaks` | Mutable | Current and longest streak counts |
@@ -677,7 +677,7 @@ Pre-connected on-platform institution with TFSA/RRSP/chequing accounts and holdi
 
 ### React Frontend
 
-React 19 + Vite 7 + Tailwind CSS 4. Wealthsimple-inspired design (warm whites #FAF9F7, Dune #32302F, Mulish font). Pages: Financial Picture (twin dashboard), Progress (gamified wellness), Your Adviser (conversation-first planning), Admin (5-tab console). 7 seed users with varied demographics.
+React 19 + Vite 7 + Tailwind CSS 4. Wealthsimple-inspired design (warm whites #FAF9F7, Dune #32302F, Mulish font). Pages: Financial Picture (twin dashboard), Progress (gamified wellness), Your Adviser (conversation-first planning), Settings (profile editor), Admin (5-tab console). 7 seed users with varied demographics.
 
 ### Simulated Users (7)
 

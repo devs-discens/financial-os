@@ -23,6 +23,10 @@ class ApproveRequest(BaseModel):
     node_keys: list[str]
 
 
+class ToggleNodeRequest(BaseModel):
+    checked: bool
+
+
 @router.post("/generate")
 async def generate_dag(
     req: GenerateRequest,
@@ -76,6 +80,16 @@ async def archive_dag(
     if not archived:
         raise HTTPException(404, f"DAG {dag_id} not found or already archived")
     return {"status": "archived", "dag_id": dag_id}
+
+
+@router.patch("/{dag_id}/nodes/{node_key}")
+async def toggle_node_checked(dag_id: int, node_key: str, req: ToggleNodeRequest):
+    pool = get_pool()
+    updated = await dag_engine.toggle_node_checked(pool, dag_id, node_key, req.checked)
+    if not updated:
+        raise HTTPException(404, f"Node '{node_key}' not found in DAG {dag_id}")
+    dag = await dag_engine.get_dag(pool, dag_id)
+    return dag
 
 
 @router.post("/{dag_id}/approve")

@@ -20,7 +20,7 @@ Seven Docker services, a React frontend, and a PostgreSQL database — all opera
 
 | Service | Port | Stack | Purpose |
 |---|---|---|---|
-| **postgres** | 5433 | PostgreSQL 16 + pgvector | All persistent state (14+ tables, V1-V13 migrations) |
+| **postgres** | 5433 | PostgreSQL 16 + pgvector | All persistent state (16 tables, V1-V14 migrations) |
 | **maple-direct** | 3001 | Node/Express | Simulated bank: chequing + 2 credit cards |
 | **heritage-financial** | 3002 | Node/Express | Simulated bank: mortgage + HELOC, MFA required |
 | **frontier-business** | 3003 | Node/Express | Simulated bank: business accounts, irregular income |
@@ -31,7 +31,7 @@ Seven Docker services, a React frontend, and a PostgreSQL database — all opera
 
 ### Test Coverage
 
-204 integration tests (including real external LLM calls) and 120 unit tests verify the entire system.
+208 integration tests (including real external LLM calls) and 120 unit tests verify the entire system.
 
 | Suite | Tests | What It Covers |
 |---|---|---|
@@ -43,7 +43,7 @@ Seven Docker services, a React frontend, and a PostgreSQL database — all opera
 | Pipeline E2E | 2 | Full PII filter to LLM to rehydration |
 | Council E2E | 8 | Collaborative + adversarial with real LLM calls |
 | Background E2E | 10 | Polling, token refresh, anomaly detection, consent |
-| DAG E2E | 10 | Generation, approval, execution with real LLM calls |
+| DAG E2E | 14 | Generation, approval, execution, archive, node toggle with real LLM calls |
 | Admin Demo E2E | 13 | Bulk setup, transaction injection, user reset |
 | Auth E2E | 15 | Login, registration, token refresh, role enforcement |
 | Multi-user E2E | 5 | Cross-user isolation, concurrent connections |
@@ -218,10 +218,12 @@ When a Council session produces a recommendation and the user wants to act on it
 
 **Execution lifecycle:** `generate` (LLM creates plan) then `approve` (user selects which nodes to proceed with) then `execute` (system runs approved nodes in topological order via Kahn's algorithm). Partial approval is supported — approve steps 1-4, defer step 5.
 
+**Node checklist:** Users can mark individual steps as done via a checkbox. Checked nodes show strikethrough styling in the UI. State is persisted to the database (`checked` boolean + `checked_at` timestamp) and survives page refresh. The checklist is independent of the approve/execute lifecycle — it's visual progress tracking for manual steps.
+
 **Goal-linked DAGs:** `generate_dag` accepts an optional `goal_id` parameter, linking the action plan to a specific financial goal. Users can generate plans directly from a goal via `POST /goals/{user_id}/{goal_id}/plan`. The DAG generation prompt includes honest grounding language — action steps reference real numbers from the twin and acknowledge trade-offs.
 
 **Key files:** `services/onboarding-orchestrator/src/services/dag_engine.py`, `services/onboarding-orchestrator/src/routes/dags.py`
-**Endpoints:** `POST /dags/generate`, `GET /dags`, `GET /dags/{id}`, `POST /dags/{id}/approve`, `POST /dags/{id}/execute`, `DELETE /dags/{id}` (soft archive), `POST /goals/{user_id}/{goal_id}/plan`
+**Endpoints:** `POST /dags/generate`, `GET /dags`, `GET /dags/{id}`, `POST /dags/{id}/approve`, `POST /dags/{id}/execute`, `PATCH /dags/{id}/nodes/{node_key}` (toggle checked), `DELETE /dags/{id}` (soft archive), `POST /goals/{user_id}/{goal_id}/plan`
 
 ---
 
@@ -373,6 +375,8 @@ All three item types (conversations, goals, plans) use a uniform collapsible car
 
 **Admin** — Five-tab console. Registry tab (institution lifecycle management), Users tab (collapsible user list with connection details), Demo tab (bulk setup of 7 seed users, per-user reset, transaction injection), Benchmarks tab (editable 24-bracket table with override tracking and reset), Background tab (status bar, anomalies, per-user connection cards filtered to external banks only with poll buttons and lazy-loaded event history).
 
+**Settings** — Profile editor for demographics (age, occupation, income, city, province, relationship status, housing status, dependents) and financial goals text. Updates via `PATCH /auth/me/profile`.
+
 **Login** — Simple auth with register/sign-in toggle and demo credential hints.
 
 ### Cross-Page Navigation
@@ -392,7 +396,7 @@ React 19, Vite 7, Tailwind CSS 4 with `@theme` CSS custom properties, react-rout
 
 ## Database Schema
 
-14+ tables across 13 migrations (V1-V13), all idempotent (CREATE IF NOT EXISTS), run automatically on orchestrator startup.
+16 tables across 14 migrations (V1-V14), all idempotent (CREATE IF NOT EXISTS), run automatically on orchestrator startup.
 
 | Table | Pattern | Purpose |
 |---|---|---|
@@ -404,7 +408,7 @@ React 19, Vite 7, Tailwind CSS 4 with `@theme` CSS custom properties, react-rout
 | `twin_metrics` | Append-only | Computed metrics over time (net worth, income, DTI, etc.) |
 | `onboarding_events` | Append-only | Audit trail of all onboarding and background events |
 | `action_dags` | Mutable | Generated action plans with lifecycle status (goal_id FK) |
-| `dag_nodes` | Mutable | Individual steps within action plans |
+| `dag_nodes` | Mutable | Individual steps within action plans (with checked/checked_at for checklist tracking) |
 | `users` | Mutable | Authentication and profile (demographics, role) |
 | `progress_milestones` | Append-only | Detected achievements with narrative and acknowledgement |
 | `progress_streaks` | Mutable | Current and longest streak counts |
@@ -416,6 +420,8 @@ React 19, Vite 7, Tailwind CSS 4 with `@theme` CSS custom properties, react-rout
 MIGRATION_V12 adds `goal_id` foreign key columns to `action_dags` and `council_sessions`, linking plans and advisory sessions to specific goals.
 
 MIGRATION_V13 adds `goal_embedding VECTOR(1536)` to `user_goals` (with HNSW index for cosine similarity search) and `archived BOOLEAN` columns to both `council_sessions` and `action_dags` (soft archive pattern).
+
+MIGRATION_V14 adds `checked BOOLEAN NOT NULL DEFAULT FALSE` and `checked_at TIMESTAMPTZ` to `dag_nodes`, enabling checklist-style progress tracking on action plan steps.
 
 ---
 
@@ -524,7 +530,7 @@ cd ui && npm run dev
 
 # Run all tests
 cd services
-node --test tests/integration/*.test.js   # 204 integration tests
+node --test tests/integration/*.test.js   # 208 integration tests
 npm test                                   # 75 JS unit tests
 cd onboarding-orchestrator && python3 -m unittest tests/test_guardrails.py -v  # 45 Python unit tests
 

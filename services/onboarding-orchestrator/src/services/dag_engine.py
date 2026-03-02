@@ -295,6 +295,8 @@ def _node_to_dict(
         "prerequisites": prerequisites,
         "result": result_data,
         "instructions": instr_override or row["instructions"],
+        "checked": row["checked"] if "checked" in row.keys() else False,
+        "checked_at": row["checked_at"].isoformat() if row.get("checked_at") else None,
     }
 
 
@@ -363,6 +365,22 @@ async def archive_dag(pool: asyncpg.Pool, dag_id: int) -> bool:
     if archived:
         logger.info("DAG ← archived dag=%d", dag_id)
     return archived
+
+
+async def toggle_node_checked(
+    pool: asyncpg.Pool, dag_id: int, node_key: str, checked: bool,
+) -> bool:
+    """Toggle the checked state of a DAG node. Returns True if updated."""
+    result = await pool.execute(
+        """UPDATE dag_nodes
+           SET checked = $1, checked_at = CASE WHEN $1 THEN now() ELSE NULL END
+           WHERE dag_id = $2 AND node_key = $3""",
+        checked, dag_id, node_key,
+    )
+    updated = result == "UPDATE 1"
+    if updated:
+        logger.info("DAG ← node %s in dag=%d checked=%s", node_key, dag_id, checked)
+    return updated
 
 
 async def approve_nodes(

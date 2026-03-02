@@ -333,7 +333,7 @@ Solutions:
 
 ## Schema Evolution
 
-12 tables with 8 migrations today. In six months, new metrics, restructured account models, new account types. How to migrate millions of rows without downtime?
+16 tables with 14 migrations today. In six months, new metrics, restructured account models, new account types. How to migrate millions of rows without downtime?
 
 Solutions:
 

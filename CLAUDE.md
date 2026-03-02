@@ -41,9 +41,9 @@ node --test tests/integration/llm-e2e.test.js              # 6 LLM tests
 node --test tests/integration/pii-llm-e2e.test.js          # 2 pipeline tests
 node --test tests/integration/council-e2e.test.js          # 8 council tests
 node --test tests/integration/background-e2e.test.js       # 10 background orchestration tests
-node --test tests/integration/dag-e2e.test.js              # 10 DAG engine tests (real LLM calls)
+node --test tests/integration/dag-e2e.test.js              # 14 DAG engine tests (real LLM calls)
 node --test tests/integration/guardrails-e2e.test.js       # 18 guardrails tests
-node --test tests/integration/session-e2e.test.js          # 10 session persistence tests (real LLM calls)
+node --test tests/integration/session-e2e.test.js          # 17 session persistence tests (real LLM calls)
 
 # Python unit tests (no Docker needed)
 cd onboarding-orchestrator && python3 -m unittest tests/test_guardrails.py -v  # 45 guardrails unit tests
@@ -99,7 +99,7 @@ Some orchestrator tests (Heritage MFA, Frontier connect, second-user connect) fa
 
 **Background polling** (automatic, 30s interval): for each active connection → check token expiry (preemptive refresh with 5-min buffer) → pull balances → detect anomalies (>20% change) → pull transactions → compute metrics → log events. Handles consent revoked (403), token expired (401), rate limiting (429) with exponential backoff.
 
-**DAG generation** (POST `/dags/generate`): **inbound guardrail** → get twin snapshot → create PII session → filter context → LLM generates structured action plan as JSON (realistic amounts via prompt engineering in `dag_engine.py`) → parse nodes with dependencies → store to DB → rehydrate descriptions → **outbound guardrail** → return DAG with `steps[]`. Accepts optional `goal_id` parameter to link DAG to a goal. Goal-linked DAGs also generated via `POST /goals/{user_id}/{goal_id}/plan`. Nodes are approved then executed in topological order. Archive: `DELETE /dags/{dag_id}` (soft archive, excluded from list).
+**DAG generation** (POST `/dags/generate`): **inbound guardrail** → get twin snapshot → create PII session → filter context → LLM generates structured action plan as JSON (realistic amounts via prompt engineering in `dag_engine.py`) → parse nodes with dependencies → store to DB → rehydrate descriptions → **outbound guardrail** → return DAG with `steps[]`. Accepts optional `goal_id` parameter to link DAG to a goal. Goal-linked DAGs also generated via `POST /goals/{user_id}/{goal_id}/plan`. Nodes are approved then executed in topological order. Node checklist: `PATCH /dags/{dag_id}/nodes/{node_key}` toggles `checked`/`checked_at` (visual tracking, independent of execution flow). Archive: `DELETE /dags/{dag_id}` (soft archive, excluded from list).
 
 **Goals** (POST `/goals/{user_id}`): **inbound guardrail** → get twin snapshot → PII filter → LLM analyzes feasibility (green/yellow/red, honest adviser tone via `goals.py` prompt engineering) → parse structured JSON → **outbound guardrail** → embed goal text (OpenAI text-embedding-3-small) → store goal with assessment + embedding. CRUD at `/goals/{user_id}`, discuss via `/goals/{user_id}/{goal_id}/discuss` (triggers Council with `goal_id` link), generate action plan via `/goals/{user_id}/{goal_id}/plan` (triggers DAG with `goal_id` link). Similarity search: `POST /goals/{user_id}/check-similar` (pgvector cosine similarity, threshold=0.80). Background reassesses every 10 cycles.
 
@@ -130,7 +130,8 @@ All 3 banks + registry are Node npm workspaces sharing a common library. Banks a
 - **Vector similarity**: `council_sessions` uses pgvector `VECTOR(1536)` column with HNSW index for cosine similarity search on question embeddings. `user_goals` also has `goal_embedding VECTOR(1536)` with HNSW index for goal similarity detection (MIGRATION_V13).
 - **Goal-linked FKs**: `action_dags.goal_id` and `council_sessions.goal_id` FK to `user_goals` (MIGRATION_V12). Links DAGs and council sessions to the goal that spawned them.
 - **Soft archive**: `council_sessions.archived` and `action_dags.archived` BOOLEAN columns (MIGRATION_V13). Archived items excluded from list/similarity queries. Goals use `status='abandoned'` for soft delete (pre-existing pattern).
-- **Migrations**: Inline SQL in `onboarding-orchestrator/src/db/migrations.py`, idempotent (CREATE IF NOT EXISTS). Run automatically on orchestrator startup. 13 tables (through MIGRATION_V13): institution_templates, connections, connected_accounts, twin_transactions, twin_statements, twin_metrics, onboarding_events, action_dags, dag_nodes, twin_holdings, user_goals, council_sessions, + progress tables.
+- **DAG node checklist**: `dag_nodes.checked` BOOLEAN + `checked_at` TIMESTAMPTZ (MIGRATION_V14). Toggle via `PATCH /dags/{dag_id}/nodes/{node_key}` (body: `{checked: bool}`). Purely visual tracking — doesn't affect approve/execute flow. UI: checkbox before node title, strikethrough + muted bg on checked nodes.
+- **Migrations**: Inline SQL in `onboarding-orchestrator/src/db/migrations.py`, idempotent (CREATE IF NOT EXISTS). Run automatically on orchestrator startup. 14 migrations (V1–V14), 16 tables: institution_templates, connections, connected_accounts, twin_transactions, twin_statements, twin_metrics, onboarding_events, action_dags, dag_nodes, twin_holdings, user_goals, council_sessions, users, progress_milestones, progress_streaks, benchmark_overrides.
 
 ### Configuration Pattern
 
@@ -171,14 +172,14 @@ React 19 + Vite + Tailwind CSS 4. Lives in `services/ui/`.
 
 **Branding**: "Your Financial Picture" (not "Financial OS"). Sidebar subtitle: "Powered by AI". Button: "Link Financial Source" (not "Connect Bank"). Custom SVG favicon (Dune circle + dollar sign). Dynamic page title: "Your Financial Picture — {display_name}".
 
-**Pages**: Login, Financial Picture (TwinDashboard), Progress, Your Adviser (`/plan`, `YourPlan.tsx` — conversation-first: Ask Your Adviser → Past Conversations → Your Goals → Your Action Plans), Admin (5 subroutes). Auth context with protected/admin routes. Sidebar shows "Your Adviser" (was "Your Plan"). Sidebar shows admin nav items directly for admin users (no user nav), user nav items for regular users. `Explore.tsx` is dead code (kept but not imported).
+**Pages**: Login, Financial Picture (TwinDashboard), Progress, Your Adviser (`/plan`, `YourPlan.tsx` — conversation-first: Ask Your Adviser → Past Conversations → Your Goals → Your Action Plans), Settings (`/settings`, `Settings.tsx` — profile editor: age, occupation, income, city, province, relationship, housing, dependents, goals), Admin (5 subroutes). Auth context with protected/admin routes. Sidebar shows "Your Adviser" (was "Your Plan"). Sidebar shows admin nav items directly for admin users (no user nav), user nav items for regular users. `Explore.tsx` and `ActionPlans.tsx` are dead code (kept but not imported).
 
 **Admin routing**: Nested subroutes (`/admin/registry`, `/admin/users`, `/admin/demo`, `/admin/benchmarks`, `/admin/background`). `Admin.tsx` is a layout wrapper (`h1` + `<Outlet />`), each tab is a named export. Index redirects to `/admin/registry`.
 
 **Key patterns**:
 - Human-readable labels throughout (no acronyms like "DTI" — always "Debt-to-Income Ratio")
 - Progress page: Assessment at top (LLM-generated title + summary on POST assess, rule-based fallback on GET), no milestone toasts. Latest milestone shown in Milestones section, expand for older ones
-- Your Adviser page (conversation-first flow): Section 1 "Ask Your Adviser" (question input at top, mode toggle below, "Track as Goal"/"Debate This?"/"Create Action Plan" on results), Section 2 "Our Past Conversations", Section 3 "Your Goals" (small "+ Add a goal manually", similar goal detection via pgvector), Section 4 "Your Action Plans". All three list sections use identical collapsible card pattern: collapsed shows title/question + date + arrow, expanded shows metadata badges + detail content + action buttons (including Archive). "Track as Goal" retroactively links session to new goal via PATCH.
+- Your Adviser page (conversation-first flow): Section 1 "Ask Your Adviser" (question input at top, mode toggle below, "Track as Goal"/"Debate This?"/"Create Action Plan" on results), Section 2 "Our Past Conversations", Section 3 "Your Goals" (small "+ Add a goal manually", similar goal detection via pgvector, structured markdown assessments with bold headings + bullets), Section 4 "Your Action Plans" (2 badges per node: type + status, checkbox per node for tracking). All three list sections use identical collapsible card pattern: collapsed shows title/question + date + arrow, expanded shows metadata badges + detail content + action buttons (including Archive). "Track as Goal" retroactively links session to new goal via PATCH.
 - TierCard shows next-tier guidance with weakest component analysis
 - Wealthsimple accounts show "On Platform" badge, holdings table per account, portfolio allocation card
 - Recent Transactions: collapsed rows (date, description, amount), click to expand details (category, account, type, ID)

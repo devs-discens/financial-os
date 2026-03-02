@@ -599,7 +599,7 @@ The MVP runs as a scripted demonstration with interactive elements. Here's the t
 
 ## What Success Looks Like
 
-> **[Implementation note]** All 8 items below were achieved, plus additional capabilities: LLM guardrails enforcing financial advisory scope, a goal system with cross-goal conflict detection and similarity search, gamified progress tracking with tiers/milestones/streaks/benchmarks, pgvector-powered session persistence, and a full React frontend. 197+ integration tests and 120 unit tests verify the system. See [What Was Built](financial-os-what-was-built.md) for the complete inventory.
+> **[Implementation note]** All 8 items below were achieved, plus additional capabilities: LLM guardrails enforcing financial advisory scope, a goal system with cross-goal conflict detection and similarity search, gamified progress tracking with tiers/milestones/streaks/benchmarks, pgvector-powered session persistence, and a full React frontend. 208 integration tests and 120 unit tests verify the system. See [What Was Built](financial-os-what-was-built.md) for the complete inventory.
 
 At the end of the simulation, someone watching can see:
 

@@ -18,6 +18,8 @@ export interface DagNode {
   prerequisites: Record<string, unknown>
   result: Record<string, unknown> | null
   instructions: string | null
+  checked: boolean
+  checked_at: string | null
 }
 
 export interface Dag {

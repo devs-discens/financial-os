@@ -47,7 +47,7 @@ Respond with valid JSON only (no markdown, no code fences):
   "target_amount": null or numeric amount if applicable,
   "target_date": null or "YYYY-MM-DD" if a timeline is mentioned or can be inferred,
   "feasibility": "green (achievable), yellow (challenging but possible), or red (very difficult)",
-  "assessment": "2-3 sentence assessment grounded in their real numbers — use specific balances, rates, income figures, and timelines",
+  "assessment": "Structured assessment in markdown:\n**Current Position**: One line with specific balances/income.\n- 2-3 bullet points with concrete numbers, monthly amounts, timelines, or rate comparisons\n**Key Risk**: One line on the biggest obstacle or trade-off.",
   "cross_goal_impact": ["list of specific trade-offs with other active goals, if any"],
   "progress_pct": 0-100 estimated current progress toward this goal
 }""" + SYSTEM_GUARDRAIL
