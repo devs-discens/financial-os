@@ -1,0 +1,52 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/*
+ * Wealthsimple-inspired light theme
+ * Brand: Dune #32302F, Warm whites, Mulish font
+ * Clean, minimal, trust-focused
+ */
+@theme {
+  --color-ws-bg: #FAF9F7;
+  --color-ws-surface: #F5F3F0;
+  --color-ws-card: #FFFFFF;
+  --color-ws-border: #E8E5DF;
+  --color-ws-accent: #32302F;
+  --color-ws-accent-dim: #504D4B;
+  --color-ws-text: #32302F;
+  --color-ws-muted: #908B85;
+  --color-ws-red: #C44040;
+  --color-ws-green: #0D8050;
+  --color-ws-blue: #3B7FC4;
+  --color-ws-orange: #C47D16;
+  --color-ws-purple: #7C5CBA;
+  --color-ws-yellow: #B89420;
+}
+
+body {
+  background-color: var(--color-ws-bg);
+  color: var(--color-ws-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  font-family: "Mulish", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0.01em;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-ws-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-ws-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ws-muted);
+}

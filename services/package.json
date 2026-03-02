@@ -1,0 +1,30 @@
+{
+  "name": "financial-os-services",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "bank-maple-direct",
+    "bank-heritage-financial",
+    "bank-frontier-business",
+    "registry"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "start": "npm run start --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "test:shared": "npm test -w shared",
+    "test:maple": "npm test -w bank-maple-direct",
+    "test:heritage": "npm test -w bank-heritage-financial",
+    "test:frontier": "npm test -w bank-frontier-business",
+    "test:registry": "npm test -w registry",
+    "test:integration": "node --test tests/integration/*.test.js",
+    "test:e2e:banks": "node --test tests/integration/docker-e2e.test.js",
+    "test:e2e:orchestrator": "node --test tests/integration/orchestrator-e2e.test.js",
+    "test:e2e:background": "node --test tests/integration/background-e2e.test.js",
+    "test:e2e:dags": "node --test tests/integration/dag-e2e.test.js",
+    "test:e2e:auth": "node --test tests/integration/auth-e2e.test.js",
+    "test:e2e:multiuser": "node --test tests/integration/multiuser-e2e.test.js",
+    "test:e2e:admin-demo": "node --test tests/integration/admin-demo-e2e.test.js",
+    "test:all": "node --test shared/src/*.test.js shared/src/**/*.test.js bank-maple-direct/src/*.test.js bank-heritage-financial/src/*.test.js bank-frontier-business/src/*.test.js registry/src/*.test.js tests/integration/full-system.test.js"
+  }
+}

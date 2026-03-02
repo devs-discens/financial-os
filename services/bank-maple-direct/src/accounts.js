@@ -1,0 +1,58 @@
+const { constants } = require('@financial-os/shared');
+const { ACCOUNT_CATEGORIES, ACCOUNT_TYPES, ACCOUNT_STATUS } = constants;
+
+const accounts = [
+  {
+    accountId: 'mpl-chq-001',
+    accountCategory: ACCOUNT_CATEGORIES.DEPOSIT,
+    accountType: ACCOUNT_TYPES.CHECKING,
+    status: ACCOUNT_STATUS.OPEN,
+    displayName: 'Maple Direct Chequing',
+    nickname: 'Daily Banking',
+    currency: 'CAD',
+    institutionId: 'maple-direct',
+    currentBalance: 4200.00,
+    availableBalance: 4200.00,
+    openDate: '2019-03-15',
+    interestRate: 0,
+    productName: 'No-Fee Chequing',
+  },
+  {
+    accountId: 'mpl-visa-001',
+    accountCategory: ACCOUNT_CATEGORIES.LOC,
+    accountType: ACCOUNT_TYPES.CREDIT_CARD,
+    status: ACCOUNT_STATUS.OPEN,
+    displayName: 'Maple Visa Infinite',
+    nickname: 'Main Visa',
+    currency: 'CAD',
+    institutionId: 'maple-direct',
+    currentBalance: 2800.00,
+    creditLimit: 10000.00,
+    availableCredit: 7200.00,
+    openDate: '2020-01-10',
+    interestRate: 20.99,
+    minimumPayment: 84.00,
+    paymentDueDate: '2026-03-15',
+    productName: 'Visa Infinite Cashback',
+  },
+  {
+    accountId: 'mpl-mc-001',
+    accountCategory: ACCOUNT_CATEGORIES.LOC,
+    accountType: ACCOUNT_TYPES.CREDIT_CARD,
+    status: ACCOUNT_STATUS.OPEN,
+    displayName: 'Maple Mastercard',
+    nickname: 'Groceries Card',
+    currency: 'CAD',
+    institutionId: 'maple-direct',
+    currentBalance: 450.00,
+    creditLimit: 5000.00,
+    availableCredit: 4550.00,
+    openDate: '2021-06-20',
+    interestRate: 19.99,
+    minimumPayment: 25.00,
+    paymentDueDate: '2026-03-20',
+    productName: 'Mastercard Everyday',
+  },
+];
+
+module.exports = accounts;

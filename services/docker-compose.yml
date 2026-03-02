@@ -1,0 +1,145 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=financial_os
+      - POSTGRES_PASSWORD=financial_os
+      - POSTGRES_DB=financial_os
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financial_os"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  maple-direct:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "bank-maple-direct/src/index.js"]
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - BASE_URL=http://maple-direct:3001
+      - NODE_ENV=production
+      - LOG_LEVEL=DEBUG
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      disable: true
+
+  heritage-financial:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "bank-heritage-financial/src/index.js"]
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - BASE_URL=http://heritage-financial:3002
+      - NODE_ENV=production
+      - LOG_LEVEL=DEBUG
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      disable: true
+
+  frontier-business:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "bank-frontier-business/src/index.js"]
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - BASE_URL=http://frontier-business:3003
+      - NODE_ENV=production
+      - LOG_LEVEL=DEBUG
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      disable: true
+
+  registry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "registry/src/index.js"]
+    ports:
+      - "3010:3010"
+    environment:
+      - PORT=3010
+      - NODE_ENV=production
+      - LOG_LEVEL=DEBUG
+      - MAPLE_BASE_URL=http://maple-direct:3001
+      - HERITAGE_BASE_URL=http://heritage-financial:3002
+      - FRONTIER_BASE_URL=http://frontier-business:3003
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      disable: true
+
+  onboarding-orchestrator:
+    build:
+      context: ./onboarding-orchestrator
+      dockerfile: Dockerfile
+    ports:
+      - "3020:3020"
+    env_file:
+      - ./onboarding-orchestrator/.env
+    environment:
+      - ONBOARDING_PORT=3020
+      - ONBOARDING_DATABASE_URL=postgresql://financial_os:financial_os@postgres:5432/financial_os
+      - ONBOARDING_REGISTRY_URL=http://registry:3010
+      - ONBOARDING_PII_FILTER_URL=http://pii-filter:3030
+      - ONBOARDING_JWT_SECRET=financial-os-dev-secret-change-in-prod
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      registry:
+        condition: service_started
+      maple-direct:
+        condition: service_started
+      pii-filter:
+        condition: service_started
+    healthcheck:
+      disable: true
+
+  pii-filter:
+    build:
+      context: ./pii-filter
+      dockerfile: Dockerfile
+    ports:
+      - "3030:3030"
+    env_file:
+      - ./pii-filter/.env
+    environment:
+      - PII_FILTER_PORT=3030
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      disable: true
