@@ -2,7 +2,6 @@
 
 An AI-native financial intelligence platform that builds a **Digital Financial Twin** from open banking (FDX) data and multi-LLM reasoning. Every external AI call passes through a PII anonymization boundary — zero personal data ever leaves the trust perimeter. Every AI-generated action plan requires explicit human approval before execution.
 
-Built as an MVP simulation designed as a pitch for Wealthsimple.
 
 ## What It Does
 
